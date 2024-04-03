@@ -540,214 +540,250 @@ function ChatTranslator.SetupHooks()
     elseif RequiredScript == "lib/managers/hud/hudchat" then
         if ChatTranslator.settings.hud == ChatTranslator.HUD.DEFAULT then
             function HUDChat:init(ws, hud)
-                self._ws = ws
-                self._hud_panel = hud.panel
+				self._ws = ws
+				self._hud_panel = hud.panel
 
-                self:set_channel_id(ChatManager.GAME)
+				self:set_channel_id(ChatManager.GAME)
 
-                self._output_width = 300
-                self._panel_width = 500
-                self._lines = {}
-                self._max_lines = 10
-                self._esc_callback = callback(self, self, "esc_key_callback")
-                self._enter_callback = callback(self, self, "enter_key_callback")
-                self._typing_callback = 0
-                self._skip_first = false
-                self._panel =
-                    self._hud_panel:panel(
-                    {
-                        name = "chat_panel",
-                        h = 500,
-                        halign = "left",
-                        x = 0,
-                        valign = "bottom",
-                        w = self._panel_width
-                    }
-                )
+				self._output_width = 300
+				self._panel_width = 500
+				self._lines = {}
+				self._esc_callback = callback(self, self, "esc_key_callback")
+				self._enter_callback = callback(self, self, "enter_key_callback")
+				self._typing_callback = 0
+				self._skip_first = false
+				self._panel = self._hud_panel:panel({
+					name = "chat_panel",
+					h = 500,
+					halign = "left",
+					x = 0,
+					valign = "bottom",
+					w = self._panel_width
+				})
 
-                self._panel:set_bottom(self._panel:parent():h() - 112)
+				self._panel:set_bottom(self._panel:parent():h() - 112)
 
-                local output_panel =
-                    self._panel:panel(
-                    {
-                        name = "output_panel",
-                        h = 10,
-                        x = 0,
-                        layer = 1,
-                        w = self._output_width
-                    }
-                )
+				local output_panel = self._panel:panel({
+					name = "output_panel",
+					h = 10,
+					x = 0,
+					layer = 1,
+					w = self._output_width
+				})
 
-                output_panel:gradient(
-                    {
-                        blend_mode = "sub",
-                        name = "output_bg",
-                        valign = "grow",
-                        layer = -1,
-                        gradient_points = {
-                            0,
-                            Color.white:with_alpha(0),
-                            0.2,
-                            Color.white:with_alpha(0.25),
-                            1,
-                            Color.white:with_alpha(0)
-                        }
-                    }
-                )
+				output_panel:gradient({
+					blend_mode = "sub",
+					name = "output_bg",
+					valign = "grow",
+					layer = -1,
+					gradient_points = {
+						0,
+						Color.white:with_alpha(0),
+						0.2,
+						Color.white:with_alpha(0.25),
+						1,
+						Color.white:with_alpha(0)
+					}
+				})
 
-                local scroll_panel =
-                    output_panel:panel(
-                    {
-                        name = "scroll_panel",
-                        x = 0,
-                        h = 10,
-                        w = self._output_width
-                    }
-                )
+				local scroll_panel = output_panel:panel({
+					name = "scroll_panel",
+					x = 0,
+					h = 10,
+					w = self._output_width
+				})
+				self._scroll_indicator_box_class = BoxGuiObject:new(output_panel, {
+					sides = {
+						0,
+						0,
+						0,
+						0
+					}
+				})
+				local scroll_up_indicator_shade = output_panel:bitmap({
+					texture = "guis/textures/headershadow",
+					name = "scroll_up_indicator_shade",
+					visible = false,
+					rotation = 180,
+					layer = 2,
+					color = Color.white,
+					w = output_panel:w()
+				})
+				local texture, rect = tweak_data.hud_icons:get_icon_data("scrollbar_arrow")
+				local scroll_up_indicator_arrow = self._panel:bitmap({
+					name = "scroll_up_indicator_arrow",
+					layer = 2,
+					texture = texture,
+					texture_rect = rect,
+					color = Color.white
+				})
+				local scroll_down_indicator_shade = output_panel:bitmap({
+					texture = "guis/textures/headershadow",
+					name = "scroll_down_indicator_shade",
+					visible = false,
+					layer = 2,
+					color = Color.white,
+					w = output_panel:w()
+				})
+				local texture, rect = tweak_data.hud_icons:get_icon_data("scrollbar_arrow")
+				local scroll_down_indicator_arrow = self._panel:bitmap({
+					name = "scroll_down_indicator_arrow",
+					layer = 2,
+					rotation = 180,
+					texture = texture,
+					texture_rect = rect,
+					color = Color.white
+				})
+				local bar_h = scroll_down_indicator_arrow:top() - scroll_up_indicator_arrow:bottom()
+				local texture, rect = tweak_data.hud_icons:get_icon_data("scrollbar")
+				local scroll_bar = self._panel:panel({
+					w = 15,
+					name = "scroll_bar",
+					layer = 2,
+					h = bar_h
+				})
+				local scroll_bar_box_panel = scroll_bar:panel({
+					name = "scroll_bar_box_panel",
+					halign = "scale",
+					w = 4,
+					x = 5,
+					valign = "scale"
+				})
+				self._scroll_bar_box_class = BoxGuiObject:new(scroll_bar_box_panel, {
+					sides = {
+						2,
+						2,
+						0,
+						0
+					}
+				})
 
-                self:_create_input_panel()
-                self:_layout_input_panel()
-                self:_layout_output_panel()
-            end
-
+				output_panel:set_x(scroll_down_indicator_arrow:w() + 4)
+				self:_create_input_panel()
+				self:_layout_input_panel()
+				self:_layout_output_panel(true)
+			end
+			
             function HUDChat:receive_message(name, message, color, icon)
-                local output_panel = self._panel:child("output_panel")
-                local scroll_panel = output_panel:child("scroll_panel")
-                local len = utf8.len(name) + 1
-                local x = 0
-                local icon_bitmap = nil
+				local output_panel = self._panel:child("output_panel")
+				local scroll_panel = output_panel:child("scroll_panel")
+				local len = utf8.len(name) + 1
+				local x = 0
+				local icon_bitmap = nil
 
-                if icon then
-                    local icon_texture, icon_texture_rect = tweak_data.hud_icons:get_icon_data(icon)
-                    icon_bitmap =
-                        scroll_panel:bitmap(
-                        {
-                            y = 1,
-                            texture = icon_texture,
-                            texture_rect = icon_texture_rect,
-                            color = color
-                        }
-                    )
-                    x = icon_bitmap:right()
-                end
+				if icon then
+					local icon_texture, icon_texture_rect = tweak_data.hud_icons:get_icon_data(icon)
+					icon_bitmap = scroll_panel:bitmap({
+						y = 1,
+						texture = icon_texture,
+						texture_rect = icon_texture_rect,
+						color = color
+					})
+					x = icon_bitmap:right()
+				end
 
-                local line =
-                    scroll_panel:text(
-                    {
-                        halign = "left",
-                        vertical = "top",
-                        hvertical = "top",
-                        wrap = true,
-                        align = "left",
-                        blend_mode = "normal",
-                        word_wrap = true,
-                        y = 0,
-                        layer = 0,
-                        text = name .. ": " .. message,
-                        font = tweak_data.menu.pd2_small_font,
-                        font_size = tweak_data.menu.pd2_small_font_size,
-                        x = x,
-                        w = scroll_panel:w() - x,
-                        color = color
-                    }
-                )
-                local total_len = utf8.len(line:text())
+				local line = scroll_panel:text({
+					halign = "left",
+					vertical = "top",
+					hvertical = "top",
+					wrap = true,
+					align = "left",
+					blend_mode = "normal",
+					word_wrap = true,
+					y = 0,
+					layer = 0,
+					text = name .. ": " .. message,
+					font = tweak_data.menu.pd2_small_font,
+					font_size = tweak_data.menu.pd2_small_font_size,
+					x = x,
+					color = color
+				})
+				local total_len = utf8.len(line:text())
 
-                line:set_range_color(0, len, color)
-                line:set_range_color(len, total_len, Color.white)
+				line:set_range_color(0, len, color)
+				line:set_range_color(len, total_len, Color.white)
 
-                local _, _, w, h = line:text_rect()
+				local _, _, w, h = line:text_rect()
 
-                line:set_h(h)
+				line:set_h(h)
+				table.insert(self._lines, {
+					line,
+					icon_bitmap
+				})
+				line:set_kern(line:kern())
+				self:_layout_output_panel()
 
-                local line_bg =
-                    scroll_panel:rect(
-                    {
-                        hvertical = "top",
-                        halign = "left",
-                        layer = -1,
-                        color = Color.black:with_alpha(0)
-                    }
-                )
+				if not self._focus then
+					scroll_panel:set_bottom(output_panel:h())
+					self:set_scroll_indicators()
+				end
 
-                line_bg:set_h(h)
+				if not self._focus then
+					local output_panel = self._panel:child("output_panel")
 
-                local line_data = {
-                    line,
-                    line_bg,
-                    icon_bitmap
-                }
-                table.insert(self._lines, line_data)
-                line:set_kern(line:kern())
-                self:_layout_output_panel()
+					output_panel:stop()
+					output_panel:animate(callback(self, self, "_animate_show_component"), output_panel:alpha())
+					output_panel:animate(callback(self, self, "_animate_fade_output"))
+				end
+			end
+			
+            function HUDChat:_layout_output_panel(force_update_scroll_indicators)
+				local output_panel = self._panel:child("output_panel")
+				local scroll_panel = output_panel:child("scroll_panel")
 
-                if not self._focus then
-                    output_panel:stop()
-                    output_panel:animate(callback(self, self, "_animate_show_component"), output_panel:alpha())
-                    output_panel:animate(callback(self, self, "_animate_fade_output"))
-                end
-            end
+				scroll_panel:set_w(self._output_width)
+				output_panel:set_w(self._output_width)
 
-            function HUDChat:_layout_output_panel()
-                local output_panel = self._panel:child("output_panel")
-                local scroll_panel = output_panel:child("scroll_panel")
+				local line_height = HUDChat.line_height
+				local max_lines = HUDChat.max_lines
+				local lines = 0
 
-                scroll_panel:set_w(self._output_width)
-                output_panel:set_w(self._output_width)
+				for i = #self._lines, 1, -1 do
+					local line = self._lines[i][1]
+					local icon = self._lines[i][2]
 
-                local line_height = ChatGui.line_height
-                local max_lines = self._max_lines
-                local lines = 0
+					line:set_w(output_panel:w() - line:left())
 
-                for i = #self._lines, 1, -1 do
-                    local line = self._lines[i][1]
-                    local line_bg = self._lines[i][2]
-                    local icon = self._lines[i][3]
+					local _, _, w, h = line:text_rect()
 
-                    line:set_w(scroll_panel:w() - line:left())
+					line:set_h(h)
 
-                    local _, _, w, h = line:text_rect()
+					lines = lines + line:number_of_lines()
+				end
 
-                    line:set_h(h)
-                    line_bg:set_w(w + line:left() + 2)
-                    line_bg:set_h(line_height * line:number_of_lines())
+				local scroll_at_bottom = scroll_panel:bottom() == output_panel:h()
 
-                    lines = lines + line:number_of_lines()
-                end
+				output_panel:set_h(line_height * math.min(max_lines, lines))
+				scroll_panel:set_h(line_height * lines)
 
-                local scroll_at_bottom = scroll_panel:bottom() == output_panel:h()
+				local y = 0
 
-                output_panel:set_h(math.round(line_height * math.min(max_lines, lines)))
-                scroll_panel:set_h(math.round(line_height * lines))
+				for i = #self._lines, 1, -1 do
+					local line = self._lines[i][1]
+					local icon = self._lines[i][2]
+					local _, _, w, h = line:text_rect()
 
-                local y = 0
+					line:set_bottom(scroll_panel:h() - y)
 
-                for i = #self._lines, 1, -1 do
-                    local line = self._lines[i][1]
-                    local line_bg = self._lines[i][2]
-                    local icon = self._lines[i][3]
-                    local _, _, w, h = line:text_rect()
+					if icon then
+						icon:set_left(icon:left())
+						icon:set_top(line:top() + 1)
+						line:set_left(icon:right())
+					else
+						line:set_left(line:left())
+					end
 
-                    line:set_bottom(scroll_panel:h() - y)
-                    line_bg:set_bottom(line:bottom())
+					y = y + line_height * line:number_of_lines()
+				end
 
-                    if icon then
-                        icon:set_left(icon:left())
-                        icon:set_top(line:top() + 1)
-                        line:set_left(icon:right())
-                    else
-                        line:set_left(line:left())
-                    end
+				output_panel:set_bottom(self._input_panel:top())
 
-                    y = y + line_height * line:number_of_lines()
-                end
+				if lines <= max_lines or scroll_at_bottom then
+					scroll_panel:set_bottom(output_panel:h())
+				end
 
-                output_panel:set_bottom(math.round(self._input_panel:top()))
-
-                if lines <= max_lines or scroll_at_bottom then
-                    scroll_panel:set_bottom(output_panel:h())
-                end
-            end
+				self:set_scroll_indicators(force_update_scroll_indicators)
+			end
 
             if ChatTranslator.settings.extend_chat then
                 function HUDChat:mouse_pressed(button, x, y)
@@ -764,34 +800,26 @@ function ChatTranslator.SetupHooks()
                 end
 
                 function HUDChat:scroll_up()
-                    local output_panel = self._panel:child("output_panel")
-                    local scroll_panel = output_panel:child("scroll_panel")
+					local output_panel = self._panel:child("output_panel")
+					local scroll_panel = output_panel:child("scroll_panel")
 
-                    if output_panel:h() < scroll_panel:h() then
-                        if scroll_panel:top() == 0 then
-                            self._one_scroll_dn_delay = true
-                        end
+					if output_panel:h() < scroll_panel:h() then
+						scroll_panel:set_top(math.min(0, scroll_panel:top() + HUDChat.line_height))
 
-                        scroll_panel:set_top(math.min(0, scroll_panel:top() + ChatGui.line_height))
-
-                        return true
-                    end
-                end
+						return true
+					end
+				end
 
                 function HUDChat:scroll_down()
-                    local output_panel = self._panel:child("output_panel")
-                    local scroll_panel = output_panel:child("scroll_panel")
+					local output_panel = self._panel:child("output_panel")
+					local scroll_panel = output_panel:child("scroll_panel")
 
-                    if output_panel:h() < scroll_panel:h() then
-                        if scroll_panel:bottom() == output_panel:h() then
-                            self._one_scroll_up_delay = true
-                        end
+					if output_panel:h() < scroll_panel:h() then
+						scroll_panel:set_bottom(math.max(scroll_panel:bottom() - HUDChat.line_height, output_panel:h()))
 
-                        scroll_panel:set_bottom(math.max(scroll_panel:bottom() - ChatGui.line_height, output_panel:h()))
-
-                        return true
-                    end
-                end
+						return true
+					end
+				end
             end
         end
 
